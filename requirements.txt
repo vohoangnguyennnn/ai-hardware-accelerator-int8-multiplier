@@ -1,0 +1,4 @@
+# Python dependencies for reference models and regression.
+# Versions are pinned to the ones the regression was validated with.
+numpy==2.5.4
+pytest==9.1.1
