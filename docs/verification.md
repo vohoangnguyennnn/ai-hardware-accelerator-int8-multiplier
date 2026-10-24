@@ -77,7 +77,20 @@ exercises truncation, compensation and the zero gate together.
 | `tbw_zero_gate_a_only` | Zero gate ignores `b` |
 | `tbw_zero_gate_dropped` | Zero gate not applied |
 
-## 5. Additional checks
+## 5. FPGA benchmark wrapper and flow
+
+* `make bench-sim`: `tb_bench_top.sv` streams all 65,536 pairs through
+  `fpga/rtl/bench_top.sv`, one per clock, and checks every result exactly 2
+  cycles later. It covers the behavioral, DSP, Baugh-Wooley, `tbw_k4_compzg`
+  and `tbw_k7_none` configurations. A wrapper without the output register
+  was confirmed to fail this check.
+* `mul8s_dsp` (DSP-mapped FPGA baseline) is an exact DUT in the main
+  regression: lint, Verilator, Icarus and Yosys.
+* `tests/test_fpga_flow.py` runs the Vivado sweep driver and Tcl script
+  against a mock Vivado (see [fpga_methodology.md](fpga_methodology.md),
+  section 9).
+
+## 6. Additional checks
 
 * `make synth-check`: Yosys `synth_xilinx -family xc7` on the exact DUTs and
   the `mul8s_tbw` spot set, as a synthesizability gate. Yosys cell counts are
@@ -85,7 +98,7 @@ exercises truncation, compensation and the zero gate together.
 * `make check-results`: regenerates `results/error_metrics.csv` and
   `results/error_by_quadrant.csv` and fails if the committed files are stale.
 
-## 6. Running the regression
+## 7. Running the regression
 
 ```bash
 sudo apt-get install -y verilator iverilog yosys
@@ -96,22 +109,25 @@ make sim-tbw_k4_comp      # one approximate configuration
 make results              # regenerate metrics and figures
 ```
 
-## 7. Recorded results
+## 8. Recorded results
 
-v0.2.0 regression, executed 2026-10-24 on Ubuntu 24.04.5 LTS with
-Verilator 5.020, Icarus Verilog 12.0, Yosys 0.33, Python 3.13.17,
-NumPy 2.5.4, pytest 9.1.1 and Matplotlib 3.11.2:
+v0.3.0-candidate regression, executed 2026-10-24 on Ubuntu 24.04.5 LTS with
+Verilator 5.020, Icarus Verilog 12.0, Yosys 0.33, Tcl 8.6.14,
+Python 3.13.17, NumPy 2.5.4, pytest 9.1.1 and Matplotlib 3.11.2
+(`make test`, 8 min 47 s):
 
 | Check | Result |
 |---|---|
-| pytest (reference models, metrics) | 124 passed |
-| Verilator `-Wall` lint | clean: 2 exact DUTs + 24 `mul8s_tbw` configurations |
-| `mul8s_behav`, `mul8s_bw` (Verilator and Icarus) | directed 17/17, exhaustive 65,536/65,536 each |
+| pytest (models, metrics, FPGA flow on a mock Vivado) | 133 passed |
+| Verilator `-Wall` lint | clean: 3 exact DUTs + 24 `mul8s_tbw` configurations + `bench_top` |
+| `mul8s_behav`, `mul8s_bw`, `mul8s_dsp` (Verilator and Icarus) | directed 17/17, exhaustive 65,536/65,536 each |
 | `mul8s_tbw`, 24 configurations (Verilator) | directed 17/17, exhaustive 65,536/65,536 each |
 | `mul8s_tbw`, 4 spot configurations (Icarus) | directed 17/17, exhaustive 65,536/65,536 each |
+| `bench_top`, 5 configurations (clocked) | 65,536/65,536 each, 2-cycle latency |
 | Yosys synthesizability | all checked targets synthesize |
 | Mutation check | 12/12 mutants detected |
 | Results consistency | committed CSV files match the models |
 
 CI (`.github/workflows/ci.yml`) re-runs `make test` on every push and pull
-request.
+request. Vivado results are produced separately; see
+[fpga_methodology.md](fpga_methodology.md).

@@ -101,6 +101,5 @@ The vendor manual lists the part both as `XC7A35T-2FGG484` and as
 `XC7A35T-2FGG484L`. The marking on the board used in this project reads
 `XC7A35T-2FGG484`, so the standard -2 speed grade (not the low-voltage -2L
 grade) is the target for all timing results.
-PPA measurements are planned as out-of-context runs with registered inputs
-and outputs; the methodology will be documented in `docs/fpga_methodology.md`
-(v0.3.0).
+PPA measurements are out-of-context Vivado runs with registered inputs and
+outputs, as defined in [fpga_methodology.md](fpga_methodology.md).

@@ -1,13 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 Vo Hoang Nguyen
 #
-# Open-source regression flow (Python models, Verilator, Icarus, Yosys).
-# FPGA PPA runs use Vivado locally and are not part of this Makefile.
+# Open-source regression flow (Python models, Verilator, Icarus, Yosys) and
+# the entry points of the local Vivado PPA flow.
 #
 #   make test                       full regression (what CI runs)
 #   make sim DUT=mul8s_bw           one exhaustive Verilator simulation
 #   make sim-tbw_k4_comp            one approximate configuration
 #   make results                    regenerate error metrics and figures
+#   make fpga                       Vivado sweep (local machine with Vivado)
 #   make help                       list targets
 
 SHELL       := /bin/bash
@@ -24,7 +25,7 @@ BUILD     ?= build
 # Exact variants: RTL sources, the reference model each must match, and
 # whether the SystemVerilog '*' operator is a valid second oracle.
 # ---------------------------------------------------------------------------
-DUTS := mul8s_behav mul8s_bw
+DUTS := mul8s_behav mul8s_bw mul8s_dsp
 
 SRCS_mul8s_behav  := rtl/mul8s_behav.sv
 MODEL_mul8s_behav := exact
@@ -33,6 +34,11 @@ EXACT_mul8s_behav := 1
 SRCS_mul8s_bw  := rtl/csa3to2.sv rtl/bw_ppgen8.sv rtl/mul8s_bw.sv
 MODEL_mul8s_bw := exact
 EXACT_mul8s_bw := 1
+
+# FPGA-only mapping variant (same arithmetic as mul8s_behav, USE_DSP attribute)
+SRCS_mul8s_dsp  := fpga/rtl/mul8s_dsp.sv
+MODEL_mul8s_dsp := exact
+EXACT_mul8s_dsp := 1
 
 # ---------------------------------------------------------------------------
 # Approximate variant mul8s_tbw: every configuration tbw_k<K>_<mode>,
@@ -54,6 +60,23 @@ vl_bit   = 1\'b$(1)
 
 TB := verif/tb_mul8s.sv
 
+# ---------------------------------------------------------------------------
+# FPGA benchmark wrapper (fpga/rtl/bench_top.sv): clocked simulation of the
+# exact netlist Vivado implements. Tags: bench_<behav|dsp|bw|tbw_k<K>_<mode>>
+# ---------------------------------------------------------------------------
+SRCS_BENCH    := rtl/mul8s_behav.sv fpga/rtl/mul8s_dsp.sv rtl/csa3to2.sv rtl/bw_ppgen8.sv \
+                 rtl/mul8s_bw.sv rtl/mul8s_tbw.sv fpga/rtl/bench_top.sv
+BENCH_CONFIGS := behav dsp bw tbw_k4_compzg tbw_k7_none
+bench_variant = $(if $(filter behav,$(1)),0,$(if $(filter dsp,$(1)),1,$(if $(filter bw,$(1)),2,3)))
+bench_model   = $(if $(filter tbw_%,$(1)),$(1),exact)
+bench_params  = -GVARIANT=$(call bench_variant,$(1)) \
+                $(if $(filter tbw_%,$(1)),-GTRUNC_COLS=$(call tbw_k,$(1)) -GCOMP_EN=$(call tbw_comp,$(1)) \
+                -GZERO_GATE=$(call tbw_zg,$(1)))
+
+# Vivado flow settings (see docs/fpga_methodology.md)
+FPGA_JOBS ?= 2
+FPGA_ARGS ?=
+
 # Per-run settings, overridable from the command line (used by the mutant runner)
 DUT     ?= mul8s_bw
 CFG     ?=
@@ -73,7 +96,7 @@ VERILATOR_SIM_FLAGS    = --binary --timing --timescale 1ns/1ps -Wall --top-modul
                          $(EXTRA_VERILATOR_FLAGS)
 
 .PHONY: help test pytest lint sim sim-all sim-tbw icarus-all synth-check mutants \
-        vectors results check-results clean
+        vectors results check-results bench-sim fpga fpga-summary clean
 # Vector files are intermediate but must survive between sub-makes.
 .SECONDARY:
 
@@ -91,9 +114,12 @@ help:
 	@echo "  mutants        confirm the testbench detects injected RTL bugs"
 	@echo "  results        regenerate results/error_metrics*.csv and results/figures/"
 	@echo "  check-results  verify committed CSV results match the models"
+	@echo "  bench-sim      clocked simulation of the FPGA benchmark wrapper"
+	@echo "  fpga           Vivado OOC sweep (needs vivado in PATH; FPGA_JOBS=$(FPGA_JOBS))"
+	@echo "  fpga-summary   tables/figures from results/fpga/fpga_results.csv"
 	@echo "  clean          remove $(BUILD)/"
 
-test: pytest lint sim-all icarus-all synth-check mutants check-results
+test: pytest lint sim-all bench-sim icarus-all synth-check mutants check-results
 	@echo "REGRESSION PASSED"
 
 pytest:
@@ -189,6 +215,26 @@ check-results:
 	  diff -u results/$$f $(BUILD)/results/$$f || { echo "results/$$f is stale: run 'make results'"; exit 1; }; \
 	done
 	@echo "check-results: committed CSV files match the models"
+
+# --- FPGA benchmark wrapper ----------------------------------------------------
+bench-sim: $(addprefix bench-,$(BENCH_CONFIGS))
+	@echo "bench-sim: $(words $(BENCH_CONFIGS))/$(words $(BENCH_CONFIGS)) wrapper configurations passed"
+
+bench-%:
+	@$(MAKE) --no-print-directory $(BUILD)/vectors/$(call bench_model,$*).hex
+	@mkdir -p $(BUILD)/bench/$*
+	$(VERILATOR) --lint-only -Wall --top-module bench_top $(call bench_params,$*) $(SRCS_BENCH)
+	$(VERILATOR) --binary --timing --timescale 1ns/1ps -Wall --top-module tb_bench_top $(call bench_params,$*) \
+	  -Mdir $(BUILD)/bench/$*/obj $(SRCS_BENCH) verif/tb_bench_top.sv > $(BUILD)/bench/$*/build.log 2>&1 \
+	  || { cat $(BUILD)/bench/$*/build.log; exit 1; }
+	$(BUILD)/bench/$*/obj/Vtb_bench_top +VECTORS=$(BUILD)/vectors/$(call bench_model,$*).hex | tee $(BUILD)/bench/$*/sim.log
+
+# --- Vivado PPA flow (local) ---------------------------------------------------
+fpga:
+	python3 fpga/scripts/run_sweep.py --jobs $(FPGA_JOBS) $(FPGA_ARGS)
+
+fpga-summary:
+	$(PYTHON) scripts/fpga_summary.py
 
 clean:
 	rm -rf $(BUILD)

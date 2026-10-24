@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Mock 'vivado' for testing fpga/scripts/run_sweep.py and run_ooc.tcl without
+# Vivado: runs the Tcl script under tclsh with stub Vivado commands
+# (mock_vivado.tcl). Accepts: -mode batch ... [-log FILE] -source SCRIPT -tclargs ARGS...
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+script="" log=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -source) script="$2"; shift 2 ;;
+    -log) log="$2"; shift 2 ;;
+    -tclargs) shift; break ;;
+    *) shift ;;
+  esac
+done
+[[ -n "$script" ]] || { echo "mock vivado: -source missing" >&2; exit 2; }
+if [[ -n "$log" ]]; then
+  tclsh "$here/mock_vivado.tcl" "$script" "$@" 2>&1 | tee "$log"
+else
+  tclsh "$here/mock_vivado.tcl" "$script" "$@"
+fi

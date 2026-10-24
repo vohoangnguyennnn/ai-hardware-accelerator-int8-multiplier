@@ -13,11 +13,13 @@ verification -> error characterisation -> FPGA implementation -> PPA evaluation.
 |---|---|---|
 | v0.1.0 | Exact behavioral and structural Baugh-Wooley multipliers, Python reference models, exhaustive verification | **Done** |
 | v0.2.0 | Parameterized truncated Baugh-Wooley approximate multiplier, bit-accurate model, error characterisation | **Done** (all checks pass, see below) |
-| v0.3.0 | Vivado 2024.1 out-of-context PPA evaluation on Artix-7 (`xc7a35tfgg484-2`) | Planned |
+| v0.3.0 | Vivado 2024.1 out-of-context PPA evaluation on Artix-7 (`xc7a35tfgg484-2`) | **In progress**: flow implemented and tested with a mock Vivado; awaiting real Vivado runs |
 | v1.0.0 | Stable IP, documentation, reproducible benchmark | Planned |
 
 No FPGA utilization, timing or power numbers have been measured yet. Any
-hardware benefit of the approximate design is still unverified.
+hardware benefit of the approximate design is still unverified. The
+measurement method is fixed in advance in
+[docs/fpga_methodology.md](docs/fpga_methodology.md).
 
 ## Arithmetic specification (summary)
 
@@ -36,6 +38,8 @@ Full details: [docs/spec.md](docs/spec.md).
 | [`rtl/mul8s_tbw.sv`](rtl/mul8s_tbw.sv) | Approximate. Truncated Baugh-Wooley: removes the `TRUNC_COLS` (0..7) lowest matrix columns, with an optional bias-compensation constant (`COMP_EN`) and an optional zero-operand gate (`ZERO_GATE`) |
 | [`rtl/bw_ppgen8.sv`](rtl/bw_ppgen8.sv) | Baugh-Wooley partial-product generator (with column truncation) |
 | [`rtl/csa3to2.sv`](rtl/csa3to2.sv) | Row-level 3:2 carry-save adder |
+| [`fpga/rtl/mul8s_dsp.sv`](fpga/rtl/mul8s_dsp.sv) | Exact, DSP48E1-mapped FPGA baseline (same arithmetic as `mul8s_behav`) |
+| [`fpga/rtl/bench_top.sv`](fpga/rtl/bench_top.sv) | FPGA benchmark wrapper: registered inputs, multiplier, registered output (2-cycle latency) |
 
 Derivations: [docs/architecture.md](docs/architecture.md) (exact) and
 [docs/approximation.md](docs/approximation.md) (approximate).
@@ -69,10 +73,11 @@ testing. Full method: [docs/verification.md](docs/verification.md).
 
 | Check | Result (2026-10-24) |
 |---|---|
-| Reference-model and metric tests (pytest) | 124 passed |
+| Python tests (models, metrics, FPGA flow on a mock Vivado) | 133 passed |
 | `mul8s_behav`, `mul8s_bw`, exhaustive (Verilator, Icarus) | 65,536 / 65,536 |
 | `mul8s_tbw`, exhaustive, all 24 configurations (Verilator) | 65,536 / 65,536 each |
 | `mul8s_tbw`, exhaustive, 4 spot configurations (Icarus) | 65,536 / 65,536 each |
+| FPGA benchmark wrapper, clocked (5 configurations) | 65,536 / 65,536, 2-cycle latency |
 | Verilator `-Wall` lint (all DUTs and configurations) | clean |
 | Injected RTL bugs detected by the testbench | 12 / 12 |
 
@@ -90,6 +95,15 @@ make results             # regenerate error metrics and figures
 make help
 ```
 
+FPGA PPA sweep (needs Vivado 2024.1; see
+[docs/fpga_methodology.md](docs/fpga_methodology.md)):
+
+```bash
+source /tools/Xilinx/Vivado/2024.1/settings64.sh
+make fpga FPGA_JOBS=2      # writes results/fpga/
+make fpga-summary          # tables and trade-off figures
+```
+
 ## Repository layout
 
 ```
@@ -97,17 +111,18 @@ rtl/       synthesizable SystemVerilog (no tool-specific attributes)
 models/    Python reference models, error metrics, vector generator
 tests/     pytest tests for the models and metrics
 verif/     self-checking testbench and mutation runner
-scripts/   error characterisation (CSV tables and figures)
-results/   generated error metrics and figures (checked by CI)
-docs/      specification, architecture, approximation, metrics, verification
+scripts/   error characterisation and FPGA result summaries
+fpga/      benchmark wrapper, DSP variant, Vivado Tcl flow and sweep driver
+results/   generated error metrics, figures and (after Vivado runs) FPGA results
+docs/      specification, architecture, approximation, metrics, verification, FPGA method
 ```
 
 ## Roadmap
 
-* **v0.3.0**: Vivado 2024.1 OOC flow on the MicroPhase A7-Lite 35T device.
-  Compare exact DSP, exact LUT, structural Baugh-Wooley and the `mul8s_tbw`
-  sweep using post-route utilization and timing, then select the recommended
-  approximate configuration.
+* **v0.3.0**: run the Vivado 2024.1 OOC sweep on the MicroPhase A7-Lite 35T
+  device. Compare exact DSP, exact LUT, structural Baugh-Wooley and all 24
+  `mul8s_tbw` configurations by post-route utilization and Fmax, then select
+  the recommended approximate configuration.
 * **v1.0.0**: Interface freeze, documentation, release packaging.
 
 ## License

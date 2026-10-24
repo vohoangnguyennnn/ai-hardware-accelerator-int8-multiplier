@@ -4,7 +4,28 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]: v0.2.0 candidate
+## [Unreleased]: v0.3.0 candidate
+
+### Added
+
+- FPGA benchmark wrapper `fpga/rtl/bench_top.sv` (registered inputs and
+  output, 2-cycle latency) and DSP-mapped baseline `fpga/rtl/mul8s_dsp.sv`.
+- Vivado 2024.1 out-of-context flow `fpga/scripts/run_ooc.tcl` and sweep
+  driver `fpga/scripts/run_sweep.py` (standard-library Python). The driver
+  runs 27 variants on `xc7a35tfgg484-2`, with utilization and power at a
+  common 10 ns constraint and an Fmax search that reports only passing
+  post-route runs. It writes CSV, a manifest and reports to `results/fpga/`.
+- `scripts/fpga_summary.py`: summary table and LUT-vs-MAE / Fmax-vs-K figures.
+- Clocked wrapper testbench (`make bench-sim`), `mul8s_dsp` in the exhaustive
+  regression, and a mock-Vivado test of the whole FPGA flow
+  (`tests/test_fpga_flow.py`).
+- `docs/fpga_methodology.md`.
+
+### Pending
+
+- Real Vivado results (to be produced on the project owner's machine).
+
+## [0.2.0] - 2026-10-24
 
 ### Added
 
