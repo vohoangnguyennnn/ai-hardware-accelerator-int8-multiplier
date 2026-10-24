@@ -89,14 +89,16 @@ Worst-case error (WCE) is intentionally not part of the reported metric set.
 | Item | Value | Source |
 |---|---|---|
 | Board | MicroPhase A7-Lite 35T | Project owner |
-| Device | XC7A35T-2FGG484 (Artix-7, speed grade -2) | MicroPhase A7-Lite reference manual |
+| Device | XC7A35T-2FGG484 (Artix-7, speed grade -2) | Chip marking, confirmed by project owner |
 | Vivado part string | `xc7a35tfgg484-2` | Derived from the device marking above |
 | DSP48E1 slices | 90 | MicroPhase A7-Lite reference manual |
 | Board clock | 50 MHz oscillator, pin J19 | MicroPhase A7-Lite reference manual |
 | Toolchain | AMD Vivado 2024.1 | Project owner |
 
-The vendor manual also lists the part as `XC7A35T-2FGG484L`, with an extra suffix.
-Confirm the part against the marking on the chip before the v0.3.0 runs.
+The vendor manual lists the part both as `XC7A35T-2FGG484` and as
+`XC7A35T-2FGG484L`. The marking on the board used in this project reads
+`XC7A35T-2FGG484`, so the standard -2 speed grade (not the low-voltage -2L
+grade) is the target for all timing results.
 PPA measurements are planned as out-of-context runs with registered inputs
 and outputs; the methodology will be documented in `docs/fpga_methodology.md`
 (v0.3.0).
