@@ -101,8 +101,8 @@ in this tree.
 
 A bit-level Dadda tree can use fewer adder cells than this row-level tree.
 The row-level form was chosen because it is easy to review, and because
-truncation (v0.2.0) only needs partial-product bits forced to zero, with no
-rewiring.
+truncation only needs partial-product bits forced to zero, with no rewiring
+(see [approximation.md](approximation.md)).
 
 ### 2.4 Final carry-propagate adder
 

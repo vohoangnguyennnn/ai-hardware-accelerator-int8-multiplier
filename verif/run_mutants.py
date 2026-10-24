@@ -30,9 +30,13 @@ class Mutant:
     old: str
     new: str
     intent: str
+    cfg: str = ""  # mul8s_tbw configuration tag the mutant is simulated with
 
 
 BW_SRCS = ("rtl/csa3to2.sv", "rtl/bw_ppgen8.sv", "rtl/mul8s_bw.sv")
+TBW_SRCS = ("rtl/csa3to2.sv", "rtl/bw_ppgen8.sv", "rtl/mul8s_tbw.sv")
+# Exercises truncation, compensation and the zero gate at once.
+TBW_CFG = "tbw_k4_compzg"
 
 MUTANTS = [
     Mutant("behav_unsigned", "mul8s_behav", ("rtl/mul8s_behav.sv",), "rtl/mul8s_behav.sv",
@@ -56,6 +60,21 @@ MUTANTS = [
     Mutant("cpa_no_carry", "mul8s_bw", BW_SRCS, "rtl/mul8s_bw.sv",
            "assign p = $signed(l4_s + l4_c);", "assign p = $signed(l4_s ^ l4_c);",
            "final adder without carry propagation"),
+    Mutant("tbw_trunc_off_by_one", "mul8s_tbw", TBW_SRCS, "rtl/bw_ppgen8.sv",
+           "if (i + j < TRUNC_COLS) begin : g_trunc", "if (i + j <= TRUNC_COLS) begin : g_trunc",
+           "one column too many truncated", TBW_CFG),
+    Mutant("tbw_no_comp_row", "mul8s_tbw", TBW_SRCS, "rtl/mul8s_tbw.sv",
+           "assign r8 = COMP_ROW;", "assign r8 = '0;",
+           "compensation constant not added", TBW_CFG),
+    Mutant("tbw_tree_wiring", "mul8s_tbw", TBW_SRCS, "rtl/mul8s_tbw.sv",
+           ".z(l1_c2)", ".z(l1_s2)",
+           "9-row reduction tree wiring error", TBW_CFG),
+    Mutant("tbw_zero_gate_a_only", "mul8s_tbw", TBW_SRCS, "rtl/mul8s_tbw.sv",
+           "(a == '0) || (b == '0)", "(a == '0)",
+           "zero gate ignores b", TBW_CFG),
+    Mutant("tbw_zero_gate_dropped", "mul8s_tbw", TBW_SRCS, "rtl/mul8s_tbw.sv",
+           "assign p = zero_operand ? '0 : $signed(sum);", "assign p = $signed(sum);",
+           "zero gate not applied", TBW_CFG),
 ]
 
 
@@ -85,6 +104,8 @@ def run_mutant(m: Mutant) -> bool:
         f"DUT={m.dut}", f"SRCS={' '.join(srcs)}", f"SIM_DIR={sim_dir.relative_to(ROOT)}",
         "EXTRA_VERILATOR_FLAGS=-Wno-fatal",
     ]
+    if m.cfg:
+        cmd.append(f"CFG={m.cfg}")
     result = subprocess.run(cmd, capture_output=True, text=True)
     sim_log = sim_dir / "sim.log"
     if not sim_log.exists():
@@ -94,7 +115,7 @@ def run_mutant(m: Mutant) -> bool:
     detected = result.returncode != 0 and "FAIL:" in log
     mismatches = sum(1 for ln in log.splitlines() if ln.startswith("MISMATCH"))
     status = "detected" if detected else "SURVIVED"
-    print(f"  {m.name:<20} {status:<9} ({m.intent}; {mismatches} mismatches printed)")
+    print(f"  {m.name:<22} {status:<9} ({m.intent}; {mismatches} mismatches printed)")
     return detected
 
 

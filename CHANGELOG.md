@@ -4,7 +4,29 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]: v0.1.0 candidate
+## [Unreleased]: v0.2.0 candidate
+
+### Added
+
+- `mul8s_tbw`: approximate truncated Baugh-Wooley multiplier with parameters
+  `TRUNC_COLS` (0..7), `COMP_EN` (bias-compensation constant) and
+  `ZERO_GATE` (exact zero for zero operands); 9-row carry-save tree, still
+  four 3:2 levels.
+- `bw_ppgen8` parameter `TRUNC_COLS` (default 0, so `mul8s_bw` is unchanged)
+  with an elaboration-time range check.
+- `models/approx_tbw.py`: bit-accurate model in two independent formulations
+  (closed form `A*B - L_K + C_K` and truncated matrix), plus a closed-form
+  compensation constant checked against the exhaustive mean.
+- `models/metrics.py`: ER, MAE, NMED, MRED, bias and MSE (no worst-case error).
+- `scripts/error_analysis.py` and `make results`: CSV/Markdown tables and
+  figures in `results/`. `make check-results` keeps them in sync in CI.
+- Exhaustive verification of all 24 `mul8s_tbw` configurations. The testbench
+  forwards DUT parameters with `+define+TBW_PARAMS`.
+- Five approximate-datapath mutants (12 in total).
+- Documentation: `docs/approximation.md`, `docs/error_metrics.md`; updated
+  spec, verification and README.
+
+## [0.1.0] - 2026-10-24
 
 ### Added
 
