@@ -1,8 +1,7 @@
 # Arithmetic and Interface Specification
 
 This document is the single source of truth for the arithmetic behaviour and
-interfaces of the multiplier IP. Items marked **Planned** are specified
-direction only and are not yet implemented.
+interfaces of the multiplier IP.
 
 ## 1. Arithmetic
 
@@ -45,44 +44,47 @@ latency, throughput and reset behaviour.
 |---|---|---|---|
 | `mul8s_behav` | Exact | Behavioral `a * b`; mapping chosen by the FPGA flow | Implemented (v0.1.0) |
 | `mul8s_bw` | Exact | Structural modified Baugh-Wooley, row-level carry-save tree, single CPA | Implemented (v0.1.0) |
-| `mul8s_tbw` | Approximate | Truncated Baugh-Wooley | **Planned** (v0.2.0) |
+| `mul8s_tbw` | Approximate | Truncated Baugh-Wooley, parameters `TRUNC_COLS`, `COMP_EN`, `ZERO_GATE` | Implemented (v0.2.0) |
 
-## 4. Approximation semantics (Planned, v0.2.0)
+## 4. Approximation semantics
 
-The planned approximate variant removes the partial-product bits of the
-`K` least-significant columns of the Baugh-Wooley matrix
-(see [architecture.md](architecture.md)):
+`mul8s_tbw` removes the partial-product bits of the `K` least-significant
+columns of the Baugh-Wooley matrix and optionally compensates the resulting
+bias. The bit-accurate definition, which the RTL must match exactly, is:
 
 ```
-P~(A, B) = ( sum over i+j >= K of w_ij * pp_ij  +  2^8  +  2^15  +  C ) mod 2^16
+P~(A, B) = A*B - L_K(A, B) + C_K,     L_K = sum_{i+j<K} a_i b_j 2^(i+j)
+C_K      = COMP_EN ? round(((K-1) 2^K + 1) / 4) : 0
+if ZERO_GATE and (A == 0 or B == 0):  P~ = 0
 ```
 
-* `K = TRUNC_COLS`, restricted to `0 <= K <= 7`. Column 7 holds the inverted
-  terms `~(a7 b0)` and `~(a0 b7)`, which are part of the signed correction; a
-  Python pre-study showed that truncating it (`K = 8`) makes `0 x B` non-zero
-  even without compensation.
-* `K = 0` must be bit-identical to the exact multiplier.
-* The compensation constant `C` and an optional zero-operand gate are under
-  investigation. A constant `C != 0` makes `0 x B = C`, which matters for
-  sparse (ReLU, zero-padded) CNN data. The selected option will be justified
-  with measured error metrics and FPGA results.
-* The approximation is intentional and specified by a bit-accurate model.
+| Parameter | Type | Range | Default |
+|---|---|---|---|
+| `TRUNC_COLS` (K) | `int` | 0..7; out-of-range values are rejected at elaboration | 4 |
+| `COMP_EN` | `bit` | 0/1 | 1 |
+| `ZERO_GATE` | `bit` | 0/1 | 1 |
+
+* `K = 0` is bit-identical to the exact product for every `COMP_EN` /
+  `ZERO_GATE` setting.
+* `K <= 7` guarantees that only unsigned AND terms are removed, so the
+  Baugh-Wooley signed correction stays intact. Column 7 holds `~(a7 b0)`
+  and `~(a0 b7)`.
+* The result always lies within the 16-bit signed range (checked by the
+  model), so no wrap-around occurs.
+* With `COMP_EN = 1` and `ZERO_GATE = 0`, a zero operand returns `C_K`
+  rather than 0.
+* The approximation is intentional and specified by `models/approx_tbw.py`.
   Any RTL deviation from that model is a functional bug.
 
-## 5. Error metrics (Planned, v0.2.0)
+Derivation, hardware mapping and measured behaviour:
+[approximation.md](approximation.md).
 
-With `e(A, B) = P~(A, B) - P(A, B)` over all 65,536 pairs (uniform inputs):
+## 5. Error metrics
 
-| Metric | Definition |
-|---|---|
-| ER | fraction of pairs with `e != 0` |
-| MAE | mean of `abs(e)` |
-| NMED | MAE / 16384, normalised by the largest exact magnitude `max abs(P)` |
-| MRED | mean of `abs(e) / abs(P)` over pairs with `P != 0` (511 pairs with `P = 0` are excluded and reported separately) |
-| Bias | mean of `e` |
-| MSE | mean of `e^2` |
-
-Worst-case error (WCE) is intentionally not part of the reported metric set.
+ER, MAE, NMED (normalised by 2^14), MRED (over pairs with `P != 0`), bias
+and MSE, computed exhaustively over all 65,536 pairs. Worst-case error is
+intentionally not reported. Definitions and conventions:
+[error_metrics.md](error_metrics.md).
 
 ## 6. FPGA target
 

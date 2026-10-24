@@ -6,8 +6,12 @@ Output format ($readmemh compatible): leading '//' comment lines, then
 65,536 lines of 4 hex digits. Line k holds the expected 16-bit product
 (two's complement) for the pair with index k = {a[7:0], b[7:0]}.
 
+Models: 'exact', 'bw', or a truncated Baugh-Wooley configuration tag
+'tbw_k<K>_<mode>' with mode in {none, comp, compzg} (see models/approx_tbw.py).
+
 Usage:
     python -m models.gen_vectors --model exact --out build/vectors/exact.hex
+    python -m models.gen_vectors --model tbw_k4_comp --out build/vectors/tbw_k4_comp.hex
 """
 
 from __future__ import annotations
@@ -17,7 +21,7 @@ from pathlib import Path
 
 import numpy as np
 
-from models import bw_model, golden
+from models import approx_tbw, bw_model, golden
 
 MODELS = {
     "exact": golden.mul_exact_vec,
@@ -25,9 +29,18 @@ MODELS = {
 }
 
 
+def model_names() -> list[str]:
+    return sorted(MODELS) + [cfg.name for cfg in approx_tbw.all_configs()]
+
+
 def generate(model: str) -> np.ndarray:
+    """Products of `model` for all 65,536 pairs in vector-file order."""
     a, b = golden.all_pairs()
-    return MODELS[model](a, b)
+    if model in MODELS:
+        return MODELS[model](a, b)
+    # The closed-form model drives the RTL vectors; the matrix form is
+    # cross-checked against it in tests/test_approx.py.
+    return approx_tbw.mul_tbw_vec(a, b, approx_tbw.TbwConfig.from_name(model))
 
 
 def write_hex(path: Path, products: np.ndarray, model: str) -> None:
@@ -50,7 +63,7 @@ def read_hex(path: Path) -> np.ndarray:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--model", choices=sorted(MODELS), required=True)
+    parser.add_argument("--model", choices=model_names(), required=True, metavar="MODEL")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     write_hex(args.out, generate(args.model), args.model)
