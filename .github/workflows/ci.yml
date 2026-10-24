@@ -1,0 +1,41 @@
+name: regression
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install EDA tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends verilator iverilog yosys
+          verilator --version
+          iverilog -V 2>&1 | head -n 1
+          yosys -V
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Regression
+        run: make test PYTHON=python
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-logs
+          path: |
+            build/sim/**/*.log
+            build/icarus/*.log
+            build/yosys/*.stat
+            build/mutants/**/sim.log
+          if-no-files-found: ignore
